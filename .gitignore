@@ -1,0 +1,8 @@
+build/
+__pycache__/
+*.pyc
+.venv/
+obj_dir/
+*.vcd
+*.fst
+.DS_Store
