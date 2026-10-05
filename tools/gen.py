@@ -253,6 +253,8 @@ def main():
             name = MIX_ORDER[d % len(MIX_ORDER)]
             ref = pick_ref(g.rng)
             size = max(50, int(a.day_size * g.rng.choice((0.1, 0.5, 1.0, 2.0))))
+            if len(rules.price_levels(ref)) > (1 << E.Params.LVL_BITS):
+                size = 30                                   # a day the engine refuses: a few messages are enough
             g.day(ref, PROFILES[name], size, vi=0 if g.rng.random() < 0.1 else 1,
                   to_close=g.rng.random() < 0.7)
             d += 1
