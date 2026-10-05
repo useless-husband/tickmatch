@@ -1,0 +1,16 @@
+{
+ "family": "Xilinx 7-series (xc7), Yosys synth_xilinx",
+ "lut": 11050,
+ "lutram_cells": 208,
+ "ff": 2495,
+ "bram36": 3,
+ "bram18": 9,
+ "dsp48": 34,
+ "carry4": 467,
+ "muxf": 51,
+ "logic_levels": null,
+ "est_period_ns": null,
+ "est_fmax_mhz": null,
+ "ns_per_level": 0.6,
+ "ns_fixed": 1.0
+}

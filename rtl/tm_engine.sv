@@ -102,7 +102,7 @@ module tm_engine #(
         S_FOKF = 6'd18, S_A0 = 6'd19,   S_A1 = 6'd20,   S_A2 = 6'd21,   S_A3 = 6'd22,  S_A4 = 6'd23,
         S_U0 = 6'd24,   S_U1 = 6'd25,   S_U2 = 6'd26,   S_U3 = 6'd27,   S_A9 = 6'd28,  S_T0 = 6'd29,
         S_TA1 = 6'd30,  S_TA2 = 6'd31,  S_MD0 = 6'd32,  S_MD1 = 6'd33,  S_MD2 = 6'd34, S_MD3 = 6'd35,
-        S_MD4 = 6'd36,  S_MD5 = 6'd37,  S_MD6 = 6'd38;
+        S_MD4 = 6'd36,  S_MD5 = 6'd37,  S_MD6 = 6'd38,  S_PRE = 6'd39;
 
     reg [5:0] st;
 
@@ -147,18 +147,30 @@ module tm_engine #(
     wire [T_W-1:0]    m_time = m_price[T_W-1:0];
 
     // price in cents -> level index, with range and tick checks (R2, R3): a restoring
-    // divider, combinational, LVL_W steps; the divisor is one of the day's two tick sizes
+    // divider by one of the day's two tick sizes, LVL_W steps, split over two clock cycles
+    // (S_PRE does the upper half of the quotient, S_DEC the lower half)
     wire               p_in_range = (m_price >= cfg_lim_dn) && (m_price <= cfg_lim_up);
     wire               p_hi   = (m_price >= brk_price);
     wire [PRICE_W-1:0] p_base = p_hi ? brk_price : cfg_lim_dn;
     wire [9:0]         p_tick = p_hi ? tick_hi : tick_lo;
-    reg  [PRICE_W-1:0] p_rem;
-    reg  [LVL_W-1:0]   p_quo;
+    localparam DH = LVL_W / 2;
+    reg  [PRICE_W-1:0] pa_rem, p_rem, d_rem;
+    reg  [LVL_W-1:0]   pa_quo, p_quo, d_quo;
     integer            k;
-    always @* begin
-        p_rem = m_price - p_base;
-        p_quo = {LVL_W{1'b0}};
-        for (k = LVL_W - 1; k >= 0; k = k - 1) begin
+    always @* begin                        // first cycle: quotient bits LVL_W-1 .. DH
+        pa_rem = m_price - p_base;
+        pa_quo = {LVL_W{1'b0}};
+        for (k = LVL_W - 1; k >= DH; k = k - 1) begin
+            if (pa_rem >= ({{(PRICE_W-10){1'b0}}, p_tick} << k)) begin
+                pa_rem    = pa_rem - ({{(PRICE_W-10){1'b0}}, p_tick} << k);
+                pa_quo[k] = 1'b1;
+            end
+        end
+    end
+    always @* begin                        // second cycle: bits DH-1 .. 0
+        p_rem = d_rem;
+        p_quo = d_quo;
+        for (k = DH - 1; k >= 0; k = k - 1) begin
             if (p_rem >= ({{(PRICE_W-10){1'b0}}, p_tick} << k)) begin
                 p_rem    = p_rem - ({{(PRICE_W-10){1'b0}}, p_tick} << k);
                 p_quo[k] = 1'b1;
@@ -545,6 +557,11 @@ module tm_engine #(
             S_IDLE: if (in_valid && !out_valid) begin
                 m_op <= in_op; m_id <= in_id; m_side <= in_side; m_mkt <= in_mkt;
                 m_tif <= in_tif; m_price <= in_price; m_qty <= in_qty;
+                st <= (in_op == OP_NEW && !in_mkt) ? S_PRE : S_DEC;
+            end
+            S_PRE: begin                   // first half of the price -> level division
+                d_rem <= pa_rem;
+                d_quo <= pa_quo;
                 st <= S_DEC;
             end
 

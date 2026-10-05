@@ -30,8 +30,9 @@ B, S = E.BUY, E.SELL
 # knobs per profile: probabilities are per continuous-phase message
 PROFILES = {
     # ordinary flow: mostly passive limit orders near the market, some takers
-    "day":    dict(p_cancel=0.22, p_reduce=0.04, p_market=0.04, p_ioc=0.05, p_fok=0.02, p_snap=0.02,
-                   p_bad=0.002, spread=6, cross=0.30, qty=40, dt=0.25, jump=0.0005, ids=4096),
+    "day":    dict(p_cancel=0.27, p_reduce=0.04, p_market=0.04, p_ioc=0.05, p_fok=0.02, p_snap=0.02,
+                   p_bad=0.002, spread=6, cross=0.22, xoff=1.2, qty=40, dt=0.65, jump=0.00007, ids=4096, p_gap=0.0,
+                   p_dup=0.001, p_special=0.01, drift=0.012, p_far=0.0002),
     # a few levels, long queues, cancels in the middle
     "deep":   dict(p_cancel=0.35, p_reduce=0.15, p_market=0.02, p_ioc=0.03, p_fok=0.02, p_snap=0.02,
                    p_bad=0.0, spread=1, cross=0.15, qty=30, dt=0.05, jump=0.0, ids=4096),
@@ -107,12 +108,20 @@ class Gen:
         fv = levels.index(ref) if ref in levels else nl // 2          # fair value, as a level
         maxq = min(k["qty"], (1 << P.QTY_BITS) - 1)
 
+        burst = [0, B]                                                  # orders left in a one-sided burst
+
         def free_id():
-            for _ in range(8):
+            if rng.random() < k.get("p_dup", 0.02):
+                return rng.randrange(ids)                               # may be live: a duplicate
+            for _ in range(16):
                 i = rng.randrange(ids)
                 if i not in eng.orders:
                     return i
-            return rng.randrange(ids)                                   # may be live: a duplicate
+            start = rng.randrange(ids)
+            for j in range(ids):
+                if (start + j) % ids not in eng.orders:
+                    return (start + j) % ids
+            return start
 
         def new(limit_only):
             side = rng.choice((B, S))
@@ -128,10 +137,14 @@ class Gen:
                     tif = E.FOK
             # passive orders sit behind the fair value, aggressive ones cross it
             off = int(rng.expovariate(1.0 / max(k["spread"], 1)))
-            if rng.random() < k["cross"]:
+            if burst[0] > 0:                                            # news: one side keeps hitting the book
+                burst[0] -= 1
+                side, mkt, tif = burst[1], 0, E.ROD
                 off = -int(rng.expovariate(1.0 / max(k["spread"], 1))) - 1
+            elif rng.random() < k["cross"]:
+                off = -int(rng.expovariate(1.0 / k.get("xoff", max(k["spread"], 1)))) - 1
             lvl = fv - off if side == B else fv + off
-            if rng.random() < 0.03:
+            if rng.random() < k.get("p_far", 0.03):
                 lvl = rng.choice((0, nl - 1, rng.randrange(nl)))        # the limits themselves
             price = levels[min(max(lvl, 0), nl - 1)]
             qty = max(1, int(rng.expovariate(1.0 / maxq))) if rng.random() < 0.7 else rng.randint(1, maxq)
@@ -187,11 +200,11 @@ class Gen:
             # second an interruption can start and still be resolved before the closing call
             special = [x for x in (eng.fix_until, eng.fix_until + 1, eng.vi_end or 0, P.T_CCALL - P.VI_HALT_S,
                                    P.T_CCALL - P.VI_HALT_S - 1) if t < x <= t + 400]
-            if special and rng.random() < 0.08:
+            if special and rng.random() < k.get("p_special", 0.08):
                 t = rng.choice(special)
                 self.send(("T", t))
                 return
-            if r < 0.02:
+            if r < k.get("p_gap", 0.02):
                 step = rng.randint(100, 700)                             # longer than the 5-minute window
             elif r < 0.5:
                 step = int(rng.expovariate(1.0 / dt_mean)) + (1 if dt_mean >= 1 else 0)
@@ -213,8 +226,10 @@ class Gen:
         budget = n_msgs - n_close
         while self.n - sent0 < budget and t < P.T_CCALL + 5:            # continuous trading and halts
             if rng.random() < k["jump"]:
-                fv = min(max(fv + rng.choice((-1, 1)) * rng.randint(nl // 12 + 1, nl // 4 + 2), 0), nl - 1)
-            elif rng.random() < 0.2:
+                d = rng.choice((-1, 1))
+                fv = min(max(fv + d * rng.randint(nl // 12 + 1, nl // 4 + 2), 0), nl - 1)
+                burst[0], burst[1] = rng.randint(3, 25), B if d > 0 else S
+            elif rng.random() < k.get("drift", 0.2):
                 fv = min(max(fv + rng.choice((-1, 0, 1)), 0), nl - 1)
             self.send(one(limit_only=eng.phase != E.CONT))
             advance(k["dt"])

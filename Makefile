@@ -115,7 +115,8 @@ synth:
 	@mkdir -p build/synth
 	$(YOSYS) -q -l build/synth/tm_engine.log -p "read_verilog -sv -Irtl $(RTL); \
 	  synth_xilinx -family xc7 -top tm_engine -flatten; \
-	  tee -q -o build/synth/stat.json stat -json; ltp -noff" > build/synth/ltp.txt 2>&1 || (tail -20 build/synth/tm_engine.log; exit 1)
+	  tee -q -o build/synth/stat.json stat -json; \
+	  delete t:FD* t:RAMB*; ltp -noff" > /dev/null 2>&1 || (tail -20 build/synth/tm_engine.log; exit 1)
 	$(PYTHON) tools/synth_report.py build/synth
 
 clean:

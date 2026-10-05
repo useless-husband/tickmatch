@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>tickmatch: one simulated trading day</title>
+<style>
+:root { --bg:#fbfbf9; --fg:#1c1c1a; --mut:#666660; --line:#d9d8d2; --panel:#ffffff; --bid:#0b6e69; --ask:#b3541e;
+        --bidbg:#d5ebe9; --askbg:#f6dfd0; --acc:#1f4e9c; --halt:#efe3a8; }
+@media (prefers-color-scheme: dark) {
+  :root { --bg:#151614; --fg:#e8e7e2; --mut:#a0a09a; --line:#3a3b37; --panel:#1e1f1c; --bid:#58c2bb; --ask:#f0996a;
+          --bidbg:#123b39; --askbg:#4a2a18; --acc:#8fb4f5; --halt:#4a4420; }
+}
+* { box-sizing: border-box; }
+body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.5 -apple-system, "PingFang TC", "Helvetica Neue", Arial, sans-serif; }
+main { max-width:1080px; margin:0; padding:20px 24px 60px; }
+h1 { font-size:22px; margin:0 0 4px; }
+h2 { font-size:17px; margin:34px 0 8px; padding-top:14px; border-top:1px solid var(--line); }
+p { margin:6px 0; max-width:78ch; }
+.mut { color:var(--mut); }
+.small { font-size:13px; }
+table { border-collapse:collapse; }
+th, td { padding:3px 10px; text-align:right; font-variant-numeric:tabular-nums; }
+th { font-weight:600; border-bottom:1px solid var(--line); }
+td:first-child, th:first-child { text-align:left; }
+.facts { display:flex; flex-wrap:wrap; gap:8px 28px; margin:12px 0 4px; }
+.facts div b { display:block; font-size:19px; font-variant-numeric:tabular-nums; }
+.panel { background:var(--panel); border:1px solid var(--line); padding:12px 14px; }
+.replay { display:grid; grid-template-columns:330px 1fr; gap:14px; margin-top:10px; }
+@media (max-width:800px) { .replay { grid-template-columns:1fr; } }
+.ladder td { padding:2px 8px; }
+.ladder .q { width:120px; position:relative; }
+.ladder .bar { position:absolute; top:2px; bottom:2px; right:0; }
+.ladder .ask .bar { background:var(--askbg); }
+.ladder .bid .bar { background:var(--bidbg); left:0; right:auto; }
+.ladder .q span { position:relative; }
+.ladder .ask .p { color:var(--ask); } .ladder .bid .p { color:var(--bid); }
+.ladder .mid td { border-top:1px solid var(--line); border-bottom:1px solid var(--line); color:var(--mut); text-align:left; }
+button { font:inherit; color:var(--fg); background:var(--panel); border:1px solid var(--line); padding:3px 10px; cursor:pointer; }
+button:hover { border-color:var(--acc); }
+.jumps { display:flex; flex-wrap:wrap; gap:6px; margin:8px 0; }
+input[type=range] { width:100%; }
+#outs { margin:6px 0 0; padding:0; list-style:none; font:13px/1.45 ui-monospace, Menlo, monospace; }
+#msg { font:13px/1.45 ui-monospace, Menlo, monospace; font-weight:600; }
+.phase { display:inline-block; padding:1px 8px; border:1px solid var(--line); }
+.phase.p2 { background:var(--halt); }
+svg text { fill:var(--mut); font-size:11px; }
+.hist rect { fill:var(--acc); }
+code { font:13px ui-monospace, Menlo, monospace; }
+</style>
+</head>
+<body>
+<main>
+<h1>tickmatch: one simulated trading day</h1>
+<p>A hardware matching engine that follows Taiwan Stock Exchange rules, run in simulation for one symbol and one day.
+Every answer of the RTL on this day was compared, in order, with a software model of the rulebook, and they were identical.</p>
+<p class="mut small">Educational model of published TWSE rules; not affiliated with or endorsed by TWSE; not investment software.
+The order flow is generated from a fixed seed. No real order data is used.</p>
+
+<div class="facts" id="facts"></div>
+
+<h2>Replay</h2>
+<p class="small mut">Step through the day. Near the opening auction, the first interruptions and the close every message is kept;
+elsewhere the day is sampled. In call phases the line between asks and bids shows the price the auction would produce right now.</p>
+<div id="chart" class="panel"></div>
+<div class="jumps" id="jumps"></div>
+<div><button id="prev">&larr; previous</button> <button id="next">next &rarr;</button>
+  <span class="small mut" id="pos"></span></div>
+<input type="range" id="slider" min="0" value="0">
+<div class="replay">
+  <div class="panel">
+    <div><span class="phase" id="phase"></span> <b id="clock"></b></div>
+    <table class="ladder" id="ladder"></table>
+  </div>
+  <div class="panel">
+    <div class="small mut">input message</div>
+    <div id="msg"></div>
+    <div class="small mut" style="margin-top:8px">engine output</div>
+    <ul id="outs"></ul>
+  </div>
+</div>
+
+<h2>Latency per message, in clock cycles</h2>
+<p class="small mut">Counted in the RTL simulation from the cycle a message is taken to the cycle the engine is ready for the next one,
+output side always ready. It includes sending every output message of that input (one per cycle). The bars show the distribution.</p>
+<table id="lat"></table>
+
+<h2>Throughput and size</h2>
+<div id="thr"></div>
+
+<h2>How this page was made</h2>
+<p><code>make report</code> generates the day (<code>tools/gen.py --seed 2330 --profile day</code>), runs it through the Verilated RTL,
+compares the output with the golden model (<code>tools/compare.py</code>), checks the invariants (<code>tools/invariants.py</code>)
+and writes this file. Rules and their sources: <code>docs/RULES.md</code>.</p>
+</main>
+<script>
+var D = /*DATA*/null;
+function px(c) { return (c / 100).toFixed(2); }
+function clock(t) { function z(n) { return (n < 10 ? "0" : "") + n; } return z(Math.floor(t / 3600)) + ":" + z(Math.floor(t / 60) % 60) + ":" + z(t % 60); }
+function el(tag, text, cls) { var e = document.createElement(tag); if (text !== undefined) e.textContent = text; if (cls) e.className = cls; return e; }
+function num(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, ","); }
+
+// facts
+(function () {
+  var c = D.counts, f = document.getElementById("facts");
+  [[num(D.messages), "input messages"], [num(c.orders), "orders accepted"], [num(c.trades), "trades"], [num(c.lots), "lots traded"],
+   [c.auctions, "call auctions"], [c.interruptions, "volatility interruptions"], [D.cpm, "cycles per message"],
+   [px(D.ref), "reference price"], [px(D.lim_dn) + " - " + px(D.lim_up), "daily limits"]].forEach(function (x) {
+    var d = el("div"); d.appendChild(el("b", x[0])); d.appendChild(el("span", x[1], "small mut")); f.appendChild(d);
+  });
+})();
+
+// price chart (SVG, one point per minute)
+var W = 1000, H = 190, PADL = 46, PADB = 18, cursor;
+function tx(t) { return PADL + (t - (D.t_open - 600)) / (D.t_close + 300 - (D.t_open - 600)) * (W - PADL - 6); }
+(function () {
+  var NS = "http://www.w3.org/2000/svg", s = document.createElementNS(NS, "svg");
+  s.setAttribute("viewBox", "0 0 " + W + " " + H); s.setAttribute("width", "100%");
+  var lo = Infinity, hi = -Infinity, vmax = 1;
+  D.minutes.forEach(function (m) { lo = Math.min(lo, m[2]); hi = Math.max(hi, m[1]); vmax = Math.max(vmax, m[4]); });
+  if (!isFinite(lo)) { lo = D.lim_dn; hi = D.lim_up; }
+  var pad = Math.max((hi - lo) * 0.08, 1); lo -= pad; hi += pad;
+  function ty(p) { return 8 + (hi - p) / (hi - lo) * (H - PADB - 50); }
+  function add(tag, attrs, text) { var e = document.createElementNS(NS, tag); for (var k in attrs) e.setAttribute(k, attrs[k]); if (text) e.textContent = text; s.appendChild(e); return e; }
+  D.halts.forEach(function (h) { add("rect", { x: tx(h[0]), y: 4, width: Math.max(2, tx(h[1]) - tx(h[0])), height: H - PADB - 4, fill: "var(--halt)" }); });
+  [lo + pad, (lo + hi) / 2, hi - pad].forEach(function (p) {
+    add("line", { x1: PADL, x2: W - 6, y1: ty(p), y2: ty(p), stroke: "var(--line)" });
+    add("text", { x: 2, y: ty(p) + 4 }, px(p));
+  });
+  for (var t = D.t_open; t <= D.t_close; t += 1800) add("text", { x: tx(t) - 14, y: H - 4 }, clock(t).slice(0, 5));
+  D.minutes.forEach(function (m) {
+    var h = m[4] / vmax * 36;
+    add("rect", { x: tx(m[0]), y: H - PADB - h, width: Math.max(1, (W - PADL) / 300), height: h, fill: "var(--mut)", opacity: 0.45 });
+  });
+  var d = D.minutes.map(function (m, i) { return (i ? "L" : "M") + tx(m[0]).toFixed(1) + " " + ty(m[3]).toFixed(1); }).join(" ");
+  add("path", { d: d, fill: "none", stroke: "var(--acc)", "stroke-width": 1.6 });
+  cursor = add("line", { x1: 0, x2: 0, y1: 4, y2: H - PADB, stroke: "var(--fg)", "stroke-width": 1 });
+  document.getElementById("chart").appendChild(s);
+  document.getElementById("chart").appendChild(el("div", "Last price per minute (line), lots per minute (bars), interruptions (shaded).", "small mut"));
+})();
+
+// replay
+var cur = 0, slider = document.getElementById("slider");
+slider.max = D.frames.length - 1;
+function show(k) {
+  cur = Math.max(0, Math.min(D.frames.length - 1, k));
+  var f = D.frames[cur];
+  slider.value = cur;
+  document.getElementById("pos").textContent = "frame " + (cur + 1) + " of " + D.frames.length + ", input message " + num(f.i + 1) + " of " + num(D.messages);
+  var ph = document.getElementById("phase"); ph.textContent = D.phases[f.ph]; ph.className = "phase p" + f.ph;
+  document.getElementById("clock").textContent = clock(f.t);
+  document.getElementById("msg").textContent = f.m;
+  var o = document.getElementById("outs"); o.textContent = "";
+  f.o.forEach(function (x) { o.appendChild(el("li", x)); });
+  if (!f.o.length) o.appendChild(el("li", "(none)", "mut"));
+  var t = document.getElementById("ladder"); t.textContent = "";
+  var qmax = 1;
+  f.a.concat(f.b).forEach(function (r) { qmax = Math.max(qmax, r[1]); });
+  function row(r, cls) {
+    var tr = el("tr", undefined, cls), q = el("td", undefined, "q"), bar = el("div", undefined, "bar");
+    bar.style.width = Math.round(r[1] / qmax * 100) + "%"; q.appendChild(bar); q.appendChild(el("span", num(r[1])));
+    var p = el("td", r[0] === null ? "market" : px(r[0]), "p");
+    if (cls === "ask") { tr.appendChild(el("td", "", "q")); tr.appendChild(p); tr.appendChild(q); }
+    else { tr.appendChild(q); tr.appendChild(p); tr.appendChild(el("td", "", "q")); }
+    t.appendChild(tr);
+  }
+  var head = el("tr"); ["bid lots", "price", "ask lots"].forEach(function (h) { head.appendChild(el("th", h)); }); t.appendChild(head);
+  f.a.slice().reverse().forEach(function (r) { row(r, "ask"); });
+  if (f.ms) row([null, f.ms], "ask");
+  var mid = el("tr", undefined, "mid"), td = el("td"); td.colSpan = 3;
+  td.textContent = f.ind ? (f.ind[1] ? "auction now: " + px(f.ind[0]) + " x " + num(f.ind[1]) + " lots" : "auction now: no match")
+                         : (f.last ? "last trade " + px(f.last) : "no trade yet");
+  mid.appendChild(td); t.appendChild(mid);
+  if (f.mb) row([null, f.mb], "bid");
+  f.b.forEach(function (r) { row(r, "bid"); });
+  var x = tx(Math.max(f.t, D.t_open - 600)); cursor.setAttribute("x1", x); cursor.setAttribute("x2", x);
+}
+document.getElementById("prev").onclick = function () { show(cur - 1); };
+document.getElementById("next").onclick = function () { show(cur + 1); };
+slider.oninput = function () { show(+slider.value); };
+document.onkeydown = function (e) { if (e.key === "ArrowLeft") show(cur - 1); if (e.key === "ArrowRight") show(cur + 1); };
+(function () {
+  var j = document.getElementById("jumps");
+  [[0, "Start"]].concat(D.marks).forEach(function (m) {
+    var b = el("button", m[1]); b.onclick = function () { show(m[0]); }; j.appendChild(b);
+  });
+})();
+show(D.marks.length ? D.marks[0][0] : 0);
+
+// latency table with small histograms
+(function () {
+  var t = document.getElementById("lat"), head = el("tr");
+  ["message", "count", "min", "median", "p99", "max", "distribution (cycles, log count)"].forEach(function (h) { head.appendChild(el("th", h)); });
+  t.appendChild(head);
+  var gmax = 1;
+  Object.keys(D.lat).forEach(function (k) { if (k.indexOf("time") && k.indexOf("snapshot")) gmax = Math.max(gmax, D.lat[k].p99); });
+  gmax = Math.min(gmax + 4, 80);
+  Object.keys(D.lat).forEach(function (k) {
+    var s = D.lat[k], tr = el("tr");
+    [k.replace(/_/g, " "), num(s.n), s.min, s.p50, s.p99, s.max].forEach(function (v) { tr.appendChild(el("td", v)); });
+    var NS = "http://www.w3.org/2000/svg", svg = document.createElementNS(NS, "svg");
+    svg.setAttribute("width", 330); svg.setAttribute("height", 22); svg.setAttribute("class", "hist");
+    var cmax = 1; s.hist.forEach(function (h) { cmax = Math.max(cmax, h[1]); });
+    s.hist.forEach(function (h) {
+      var x = Math.min(h[0], gmax) / gmax * 320, hh = 2 + Math.log(h[1] + 1) / Math.log(cmax + 1) * 18;
+      var r = document.createElementNS(NS, "rect"); r.setAttribute("x", x); r.setAttribute("y", 22 - hh);
+      r.setAttribute("width", 3); r.setAttribute("height", hh); svg.appendChild(r);
+    });
+    var td = el("td"); td.style.textAlign = "left"; td.appendChild(svg); tr.appendChild(td); t.appendChild(tr);
+  });
+  t.parentNode.insertBefore(el("p", "Histogram axis: 0 to " + gmax + " cycles; longer ones (time jumps, snapshots in call phases, large sweeps) are drawn at the right edge.", "small mut"), t.nextSibling);
+})();
+
+// throughput and synthesis
+(function () {
+  var d = document.getElementById("thr"), s = D.synth;
+  var p = el("p");
+  p.textContent = "This day: " + num(D.messages) + " messages in " + num(D.cycles) + " cycles = " + D.cpm + " cycles per message on average.";
+  d.appendChild(p);
+  if (s && s.est_fmax_mhz) {
+    d.appendChild(el("p", "At the estimated clock of " + s.est_fmax_mhz + " MHz that is about " +
+      num(Math.round(s.est_fmax_mhz * 1e6 / D.cpm / 1000) * 1000) + " messages per second for one symbol. The clock figure is an ESTIMATE from " +
+      "logic depth after Yosys synthesis (" + s.logic_levels + " levels); no place and route was run and no board was used."));
+  }
+  if (D.bench) {
+    var t = el("table"), h = el("tr");
+    ["flow", "messages", "cycles / message", "simulation speed (messages/s)"].forEach(function (x) { h.appendChild(el("th", x)); });
+    t.appendChild(h);
+    D.bench.forEach(function (b) {
+      var tr = el("tr"); [b.name, num(b.messages), b.cycles_per_message, num(b.sim_messages_per_second)].forEach(function (v) { tr.appendChild(el("td", v)); });
+      t.appendChild(tr);
+    });
+    d.appendChild(t);
+    d.appendChild(el("p", "Simulation speed is the Verilated model on the build machine, not hardware speed.", "small mut"));
+  }
+  if (s) {
+    var t2 = el("table"), h2 = el("tr");
+    ["resource (" + s.family + ")", "count"].forEach(function (x) { h2.appendChild(el("th", x)); });
+    t2.appendChild(h2);
+    [["LUTs", s.lut], ["LUT-RAM cells", s.lutram_cells], ["flip-flops", s.ff], ["RAMB36E1", s.bram36], ["RAMB18E1", s.bram18], ["DSP48E1", s.dsp48]]
+      .forEach(function (r) { var tr = el("tr"); tr.appendChild(el("td", r[0])); tr.appendChild(el("td", num(r[1]))); t2.appendChild(tr); });
+    t2.style.marginTop = "12px";
+    d.appendChild(t2);
+  } else {
+    d.appendChild(el("p", "Run `make synth` before `make report` to include the synthesis estimate.", "small mut"));
+  }
+})();
+</script>
+</body>
+</html>
