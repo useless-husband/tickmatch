@@ -28,6 +28,21 @@ def scenario(name, ref, msgs):
     SCENARIOS.append((name, ref, msgs))
 
 
+# Official examples V1-V3 (TM-en reference-price example; DECK slides 28 and 29) as whole sessions.
+# tests/test_official.py checks that the golden model gives TWSE's stated outcome on these;
+# here the RTL must give the same messages as the golden model.
+scenario("official V1 (TM-en: VWAP 101.4, 105 triggers, auction 104 is the reference)", 10000,
+         open_at(10000) + [("T", hms(9, 1))] + trade(10, 10000, 1) + [("T", hms(9, 2))] + trade(12, 10100, 4)
+         + [("T", hms(9, 3))] + trade(14, 10200, 5)
+         + [("T", hms(9, 5, 1)), N(30, S, 10500, 1), N(31, B, 10500, 1), N(32, S, 10400, 5), ("S",),
+            ("T", hms(9, 7, 0)), ("T", hms(9, 7, 1)), ("T", hms(9, 12, 1)), N(40, S, 10750, 1), N(41, B, 10750, 1),
+            ("T", hms(9, 12, 2)), N(42, S, 10750, 1), N(43, B, 10750, 1), ("S",)])
+scenario("official V2 (DECK slide 28: 9:00-9:05 fixed reference)", 10000,
+         open_at(10000) + [("T", hms(9, 0, 1))] + trade(10, 10100, 1) + [("T", hms(9, 2, 2))] + trade(20, 10400, 1)
+         + [("T", hms(9, 4, 1)), ("S",), ("T", hms(9, 4, 2)), ("S",)])
+scenario("official V3 (DECK slide 29: rolling average after 9:05)", 10000,
+         open_at(10000) + [("T", hms(9, 1))] + trade(10, 10000, 1) + [("T", hms(9, 5, 1))] + trade(20, 10100, 1)
+         + [("T", hms(9, 5, 2))] + trade(30, 10500, 1) + [("T", hms(9, 7, 2)), ("S",)])
 # R8.1: the fixed reference still applies at exactly open + 300 s, the average one second later
 for at in (hms(9, 5, 0), hms(9, 5, 1)):
     scenario("fixed reference boundary %d" % at, 10000,

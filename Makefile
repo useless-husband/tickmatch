@@ -111,12 +111,19 @@ report: day
 demo: report
 
 # ---------------------------------------------------------------- synthesis estimate
+# Two Yosys runs for Xilinx 7-series.  Area: the default flow (block RAM, LUT RAM, DSP).
+# Depth: multipliers and level tables mapped to plain logic (-nodsp -nolutram), registers and
+# block RAMs removed, then the longest combinational path (ltp).  The DSP-free run is used for
+# depth because a DSP48 that absorbed pipeline registers would otherwise look combinational.
+# No place and route: the clock figure in synth/report.md is an estimate.
+YS_READ := read_verilog -sv -Irtl $(RTL)
+
 synth:
 	@mkdir -p build/synth
-	$(YOSYS) -q -l build/synth/tm_engine.log -p "read_verilog -sv -Irtl $(RTL); \
-	  synth_xilinx -family xc7 -top tm_engine -flatten; \
-	  tee -q -o build/synth/stat.json stat -json; \
-	  delete t:FD* t:RAMB*; ltp -noff" > /dev/null 2>&1 || (tail -20 build/synth/tm_engine.log; exit 1)
+	$(YOSYS) -q -l build/synth/area.log -p "$(YS_READ); synth_xilinx -family xc7 -top tm_engine -flatten; \
+	  tee -q -o build/synth/stat.json stat -json" > /dev/null 2>&1 || (tail -20 build/synth/area.log; exit 1)
+	$(YOSYS) -q -l build/synth/depth.log -p "$(YS_READ); synth_xilinx -family xc7 -top tm_engine -flatten -nodsp -nolutram; \
+	  delete t:FD* t:RAMB*; ltp -noff" > /dev/null 2>&1 || (tail -20 build/synth/depth.log; exit 1)
 	$(PYTHON) tools/synth_report.py build/synth
 
 clean:

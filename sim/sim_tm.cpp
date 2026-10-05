@@ -29,6 +29,8 @@ static int stall = 0;
 static FILE* out = stdout;
 static bool quiet = false;
 static uint64_t n_out = 0;
+static uint64_t n_trades = 0;   // TRADE messages so far
+static uint64_t n_rej = 0;      // REJ messages so far
 
 double sc_time_stamp() { return 0; }   // Verilator's runtime wants this
 
@@ -45,6 +47,8 @@ static void tick() {
     top->eval();
     if (top->out_valid && top->out_ready) {
         n_out++;
+        if (top->out_type == 3) n_trades++;
+        if (top->out_type == 2) n_rej++;
         if (!quiet)
             fprintf(out, "%u %u %u %u %u %u\n", (unsigned)top->out_type, (unsigned)top->out_id,
                     (unsigned)top->out_id2, (unsigned)top->out_price, (unsigned)top->out_qty,
@@ -114,7 +118,7 @@ int main(int argc, char** argv) {
         top->eval();
         while (!top->in_ready) { tick(); top->eval(); if (++guard > 1000000) { fprintf(stderr, "in_ready timeout\n"); return 1; } }
         uint64_t t0 = cycles;
-        uint64_t out0 = n_out;
+        uint64_t tr0 = n_trades, rej0 = n_rej;
         tick();                                                 // the message is taken on this edge
         top->in_valid = 0;
         guard = 0;
@@ -122,9 +126,10 @@ int main(int argc, char** argv) {
         while (!top->in_ready) { tick(); top->eval(); if (++guard > 50000000) { fprintf(stderr, "engine hung on line %llu\n", (unsigned long long)line_no); return 1; } }
         uint32_t lat = (uint32_t)(cycles - t0);
         std::string key = cls;
-        if (op == 'N') {                                        // split by how much matching the order caused
-            uint64_t k = n_out - out0;                          // ACK + fills (+ cancel)
-            key += k <= 1 ? "/0_fills" : k <= 2 ? "/1_fill" : k <= 5 ? "/2-4_fills" : "/5+_fills";
+        if (n_rej != rej0) key = "rejected";                     // any message the engine refused
+        else if (op == 'N') {                                   // split by how many fills the order caused
+            uint64_t k = n_trades - tr0;
+            key += k == 0 ? "/0_fills" : k == 1 ? "/1_fill" : k <= 4 ? "/2-4_fills" : "/5+_fills";
         }
         hist[key][lat]++;
         n_msg++;
