@@ -24,7 +24,7 @@ EQ_MSGS ?= 50000
 LONG_SEEDS ?= 11 12 13 14 15 16 17 18 19 20 21 22
 LONG_MSGS ?= 250000
 
-.PHONY: all lint build test unit vectors equiv equiv-long prove mutants synth bench day report demo clean
+.PHONY: all lint loopcheck build test unit vectors equiv equiv-long prove mutants synth bench day report demo clean
 all: test
 
 lint:
@@ -118,7 +118,15 @@ demo: report
 # No place and route: the clock figure in synth/report.md is an estimate.
 YS_READ := read_verilog -sv -Irtl $(RTL)
 
-synth:
+# Structural check of the RTL before technology mapping: fails on any combinational loop
+# (and on other netlist problems Yosys `check` knows: multiple drivers, undriven inputs used).
+loopcheck:
+	@mkdir -p build/synth
+	$(YOSYS) -q -l build/synth/check.log -p "$(YS_READ); hierarchy -top tm_engine; proc; flatten; opt_clean; \
+	  check -assert" > /dev/null 2>&1 || (grep -iE "loop|warning|error" build/synth/check.log | head -20; exit 1)
+	@echo "loopcheck: no combinational loops, no multiple drivers (yosys check -assert)"
+
+synth: loopcheck
 	@mkdir -p build/synth
 	$(YOSYS) -q -l build/synth/area.log -p "$(YS_READ); synth_xilinx -family xc7 -top tm_engine -flatten; \
 	  tee -q -o build/synth/stat.json stat -json" > /dev/null 2>&1 || (tail -20 build/synth/area.log; exit 1)

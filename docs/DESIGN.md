@@ -220,7 +220,31 @@ What the first mutation run found: two survivors, both off-by-one-second boundar
 reference; an interruption ending at exactly 13:25:00). Random flows almost never land on those seconds. The fix was
 `tools/directed_stim.py` plus making the generator jump to those seconds on purpose.
 
-## 9. Alternatives rejected
+## 9. Synthesis, "Detected loop" warnings and the critical path
+
+Early synthesis runs printed tens of thousands of Yosys `Detected loop` warnings and a longest path of 208 cells.
+Both were artefacts of how the path was measured, not loops in the design:
+
+- `ltp -noff` only skips Yosys's internal flip-flop types. After `synth_xilinx` the registers are `FDRE`/`FDSE`
+  cells, which `ltp` treats as combinational, so every state register closed a "loop" (the first run: 3,128 warnings,
+  e.g. at `u_cfg.error` and the state-machine nets).
+- With the flip-flops deleted, the LUT-RAM cells that hold the level tables (`RAM64M`, `RAM256X1S`) remained. `ltp`
+  sees a path from their write-data and write-address pins to their read output, and the head pointer read from the
+  table feeds the logic that computes the next write. That is a loop through a clocked write port (36,578 warnings,
+  208-cell "path"). DSP48 cells that absorbed pipeline registers cause the same kind of false path.
+
+How this was settled: `make loopcheck` runs `yosys check -assert` on the flattened RTL netlist before any technology
+mapping, where registers and memory write ports are explicit clocked cells. It reports 0 problems, and it fails on a
+planted two-gate loop, so it would fail the build on a real one; CI runs it. The depth figure now comes from a second
+run with `-nodsp -nolutram`, registers and block RAMs deleted, which leaves only LUTs, carry chains and muxes; that run
+reports no loops at all.
+
+The real critical path (from `synth/report.md`): the bid/ask bitmaps, through a priority encoder, through the
+market-order price conversion (R7.1, a chain of min/max comparisons of level indices), into the level-to-price
+multiplication, into `c_price`. Cutting it would mean one more state per fill (register the converted level, then
+multiply); not done, because the clock figure is an estimate in any case.
+
+## 10. Alternatives rejected
 
 - **Sorted array or heap of price levels.** The usual software answer. With at most 256 possible prices it buys
   nothing and costs an insertion network or pointer chasing.
@@ -237,7 +261,7 @@ reference; an interruption ending at exactly 13:25:00). Random flows almost neve
 - **Pipelining messages.** Rules like "market orders are withdrawn the moment an interruption starts" make every
   message depend on the complete effect of the previous one. The engine is a multi-cycle state machine.
 
-## 10. Known limits
+## 11. Known limits
 
 Listed in the README. In short: simulation only; one symbol per instance; time in whole seconds; no postponed
 open/close (R1.1); pre-open priority is arrival order (R5.1); no self-trade prevention, no account or risk checks;

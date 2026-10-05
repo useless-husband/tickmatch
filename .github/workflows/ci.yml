@@ -70,6 +70,8 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends yosys make python3
           yosys -V
+      - name: No combinational loops (yosys check -assert)
+        run: make loopcheck
       - name: synth_xilinx for 7-series (resources; depth estimate)
         run: make synth
       - uses: actions/upload-artifact@v4

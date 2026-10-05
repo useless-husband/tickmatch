@@ -52,7 +52,9 @@ class Checker(unittest.TestCase):
             elif kind == 2:
                 f[1], f[2] = f[2], f[1]                         # buyer and seller swapped
             else:
-                f[2 if stim[i].split()[2] == "0" else 1] = "4095"   # another resting order named
+                parts = stim[i].split()
+                incoming = parts[1] if parts[0] == "N" else None
+                f[1 if f[1] != incoming else 2] = "4095"        # another resting order named
             groups[i][j] = " ".join(f)
             try:
                 invariants.check(stim, groups)
