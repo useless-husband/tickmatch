@@ -1,0 +1,78 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# Everything comes from Ubuntu's own packages: verilator (5.020 on 24.04) and yosys (0.33).
+# The RTL keeps to a conservative SystemVerilog subset (no packages, interfaces, structs,
+# enums or multi-dimensional packed arrays) for these older versions.  The golden model and
+# all tools use the Python standard library only.
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends verilator g++ make
+          verilator --version
+      - name: Verilator lint (-Wall)
+        run: make lint
+      - name: Golden model - TWSE worked examples, rule tests, invariant-checker self-test
+        run: make unit
+      - name: RTL vs golden model - TWSE worked examples and directed boundary scenarios
+        run: make vectors
+      - name: RTL vs golden model - random and adversarial flows, invariants
+        run: make equiv
+      - name: Exhaustive checks on small configurations
+        run: make prove
+      - name: One simulated trading day and the HTML report
+        run: make report
+      - uses: actions/upload-artifact@v4
+        with:
+          name: report
+          path: build/report.html
+
+  mutants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Install Verilator
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends verilator g++ make
+      - name: Mutation check (every planted bug must be caught)
+        run: make mutants
+
+  synth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install Yosys
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends yosys make python3
+          yosys -V
+      - name: synth_xilinx for 7-series (resources; depth estimate)
+        run: make synth
+      - uses: actions/upload-artifact@v4
+        with:
+          name: synthesis-report
+          path: synth/report.md
