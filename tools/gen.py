@@ -183,6 +183,14 @@ class Gen:
                 return
             r = rng.random()
             step = 0
+            # boundary seconds: the last second of a fixed reference, the end of a halt, the last
+            # second an interruption can start and still be resolved before the closing call
+            special = [x for x in (eng.fix_until, eng.fix_until + 1, eng.vi_end or 0, P.T_CCALL - P.VI_HALT_S,
+                                   P.T_CCALL - P.VI_HALT_S - 1) if t < x <= t + 400]
+            if special and rng.random() < 0.08:
+                t = rng.choice(special)
+                self.send(("T", t))
+                return
             if r < 0.02:
                 step = rng.randint(100, 700)                             # longer than the 5-minute window
             elif r < 0.5:

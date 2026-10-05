@@ -24,7 +24,7 @@ sys.path.insert(0, ROOT)
 from model import engine as E  # noqa: E402
 from model import rules  # noqa: E402
 
-SIM = os.path.join("build", "sim_tm")
+SIM = os.environ.get("TM_SIM", os.path.join("build", "sim_tm"))    # mutate.py points this at a mutant
 
 
 def run_sim(stim_text):

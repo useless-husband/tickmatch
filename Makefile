@@ -48,7 +48,7 @@ build: build/sim_tm
 unit:
 	$(PYTHON) -m unittest discover -s tests -t . 2>&1 | tail -4
 
-# RTL against the golden model on TWSE's worked examples
+# RTL against the golden model on TWSE's worked examples, then on directed boundary scenarios
 vectors: build/sim_tm
 	@mkdir -p build/eq
 	$(PYTHON) tools/vectors_stim.py > build/eq/vec.stim
@@ -56,6 +56,11 @@ vectors: build/sim_tm
 	./build/sim_tm < build/eq/vec.stim > build/eq/vec.out
 	$(PYTHON) tools/compare.py build/eq/vec.exp build/eq/vec.out build/eq/vec.stim
 	$(PYTHON) tools/invariants.py build/eq/vec.stim build/eq/vec.out
+	$(PYTHON) tools/directed_stim.py > build/eq/dir.stim
+	$(PYTHON) tools/golden.py < build/eq/dir.stim > build/eq/dir.exp
+	./build/sim_tm < build/eq/dir.stim > build/eq/dir.out
+	$(PYTHON) tools/compare.py build/eq/dir.exp build/eq/dir.out build/eq/dir.stim
+	$(PYTHON) tools/invariants.py build/eq/dir.stim build/eq/dir.out
 
 # RTL against the golden model on random and adversarial flows; every output message compared
 # in order, then the invariants checked on the RTL's log.  Odd seeds run with random stalls on
