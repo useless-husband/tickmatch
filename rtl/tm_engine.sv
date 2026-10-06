@@ -123,14 +123,16 @@ module tm_engine #(
     wire [LVL_W-1:0] last_level_idx = cfg_n_levels[LVL_W-1:0] - 1'b1;
 
     // level index -> price in cents
+    // (No local variable: Verilator 5.020 reports BLKSEQ for a blocking
+    // assignment to a function-local reg when the function is called from
+    // a clocked process.)
     function [PRICE_W-1:0] l2p(input [LVL_W-1:0] lvl);
-        reg [LVL_W:0] off;
         begin
             if ({1'b0, lvl} < brk_lvl) begin
                 l2p = cfg_lim_dn + {{(PRICE_W-LVL_W){1'b0}}, lvl} * {{(PRICE_W-10){1'b0}}, tick_lo};
             end else begin
-                off = {1'b0, lvl} - brk_lvl;
-                l2p = brk_price + {{(PRICE_W-LVL_W-1){1'b0}}, off} * {{(PRICE_W-10){1'b0}}, tick_hi};
+                l2p = brk_price + {{(PRICE_W-LVL_W-1){1'b0}}, ({1'b0, lvl} - brk_lvl)}
+                                  * {{(PRICE_W-10){1'b0}}, tick_hi};
             end
         end
     endfunction
