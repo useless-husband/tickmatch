@@ -96,7 +96,7 @@ mutants:
 # ---------------------------------------------------------------- one simulated day, benchmark, report
 day: build/sim_tm
 	@mkdir -p build/day
-	$(PYTHON) tools/gen.py --seed 2330 --profile day --ref 58300 --messages 120000 --stim build/day/day.stim --exp build/day/day.exp
+	$(PYTHON) tools/gen.py --seed 2332 --profile day --ref 58300 --messages 200000 --stim build/day/day.stim --exp build/day/day.exp
 	./build/sim_tm --stats build/day/day.stats < build/day/day.stim > build/day/day.out
 	$(PYTHON) tools/compare.py build/day/day.exp build/day/day.out build/day/day.stim
 	$(PYTHON) tools/invariants.py build/day/day.stim build/day/day.out

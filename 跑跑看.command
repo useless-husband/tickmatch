@@ -6,7 +6,7 @@
 #    1. 檢查需要的工具（verilator、python3、c++、make）有沒有裝。
 #    2. 用 Verilator 把 rtl/ 資料夾裡的電路（SystemVerilog）編譯成模擬程式
 #       （第一次大約 10 秒，之後就不用再編）。
-#    3. 產生一檔股票一整天的委託（約 12 萬筆，固定亂數種子，不是真實資料），
+#    3. 產生一檔股票一整天的委託（十幾萬筆，固定亂數種子，不是真實資料），
 #       從 8:30 開盤前收單、9:00 集合競價開盤、盤中逐筆撮合、
 #       瞬間價格穩定措施、13:25 收盤集合競價，一路送進模擬的晶片，
 #       再把晶片的每一則回覆跟「軟體版規則模型」逐則比對，並檢查不變量。
@@ -50,7 +50,7 @@ echo ""
 echo "模擬一個交易日：參考價 583.00 元，漲停 641、跌停 525，升降單位 1 元"
 echo "------------------------------------------------------------"
 mkdir -p build/day
-python3 tools/gen.py --seed 2330 --profile day --ref 58300 --messages 120000 \
+python3 tools/gen.py --seed 2332 --profile day --ref 58300 --messages 200000 \
   --stim build/day/day.stim --exp build/day/day.exp > build/day/gen.txt \
   || fail "產生委託失敗，上面的訊息會說明原因。"
 echo "已產生委託：$(sed 's/.*lines; //' build/day/gen.txt)"

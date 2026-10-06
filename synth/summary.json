@@ -8,9 +8,17 @@
  "dsp48": 34,
  "carry4": 467,
  "muxf": 51,
- "logic_levels": null,
- "est_period_ns": null,
- "est_fmax_mhz": null,
- "ns_per_level": 0.6,
+ "logic_levels": 40,
+ "path_lut_levels": 30,
+ "path_carry4": 10,
+ "path_source_lines": [
+  "tm_engine.sv:310",
+  "tm_engine.sv:311",
+  "tm_engine.sv:312"
+ ],
+ "est_period_ns": 20.0,
+ "est_fmax_mhz": 50.0,
+ "ns_lut": 0.6,
+ "ns_carry": 0.1,
  "ns_fixed": 1.0
 }

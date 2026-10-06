@@ -13,9 +13,9 @@
 | CARRY4 | 467 |
 | MUXF7/F8 | 51 |
 
-Longest register-to-register path: **None cell levels** (Yosys `ltp -noff`, counting LUTs, carry cells, muxes, RAM and DSP cells alike).
+Longest register-to-register path (second run, `-nodsp -nolutram`, Yosys `ltp -noff`): **40 cells: 30 LUT/mux levels and 10 CARRY4 stages**. Source lines on it: `tm_engine.sv:310`, `tm_engine.sv:311`, `tm_engine.sv:312`.
 
-Timing ESTIMATE: 1.0 ns fixed + 0.6 ns per level = **None ns, about None MHz**. This is a rule of thumb, not a timing report; a real figure needs place and route on a named part.
+Timing ESTIMATE: 1.0 ns fixed + 0.6 ns per LUT level + 0.1 ns per CARRY4 = **20.0 ns, about 50.0 MHz**. These per-cell delays are a rule of thumb for a -1 speed grade, not a timing report; a real figure needs place and route on a named part.
 
 All cell types:
 

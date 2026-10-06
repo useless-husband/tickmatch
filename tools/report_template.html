@@ -47,6 +47,8 @@ input[type=range] { width:100%; }
 svg text { fill:var(--mut); font-size:11px; }
 .hist rect { fill:var(--acc); }
 code { font:13px ui-monospace, Menlo, monospace; }
+.scroll { overflow-x:auto; max-width:100%; }
+#outs li { overflow-wrap:anywhere; }
 </style>
 </head>
 <body>
@@ -83,13 +85,13 @@ elsewhere the day is sampled. In call phases the line between asks and bids show
 <h2>Latency per message, in clock cycles</h2>
 <p class="small mut">Counted in the RTL simulation from the cycle a message is taken to the cycle the engine is ready for the next one,
 output side always ready. It includes sending every output message of that input (one per cycle). The bars show the distribution.</p>
-<table id="lat"></table>
+<div class="scroll"><table id="lat"></table></div>
 
 <h2>Throughput and size</h2>
-<div id="thr"></div>
+<div id="thr" class="scroll"></div>
 
 <h2>How this page was made</h2>
-<p><code>make report</code> generates the day (<code>tools/gen.py --seed 2330 --profile day</code>), runs it through the Verilated RTL,
+<p><code>make report</code> generates the day (<code>tools/gen.py --seed 2332 --profile day</code>), runs it through the Verilated RTL,
 compares the output with the golden model (<code>tools/compare.py</code>), checks the invariants (<code>tools/invariants.py</code>)
 and writes this file. Rules and their sources: <code>docs/RULES.md</code>.</p>
 </main>
@@ -208,7 +210,7 @@ show(D.marks.length ? D.marks[0][0] : 0);
     });
     var td = el("td"); td.style.textAlign = "left"; td.appendChild(svg); tr.appendChild(td); t.appendChild(tr);
   });
-  t.parentNode.insertBefore(el("p", "Histogram axis: 0 to " + gmax + " cycles; longer ones (time jumps, snapshots in call phases, large sweeps) are drawn at the right edge.", "small mut"), t.nextSibling);
+  t.parentNode.parentNode.insertBefore(el("p", "Histogram axis: 0 to " + gmax + " cycles; longer ones (time jumps, snapshots in call phases, large sweeps) are drawn at the right edge.", "small mut"), t.parentNode.nextSibling);
 })();
 
 // throughput and synthesis
