@@ -167,7 +167,7 @@ auction execute at the one price, in priority order (R5). Unfilled orders stay i
 anchor. This cannot occur: the qualifying prices form a contiguous run of ticks and the anchor (a past trade price or
 the reference price) is itself a tick inside the limits, so it is either inside the run (distance 0, unique) or on one
 side of it (nearest end, unique). `docs/DESIGN.md` gives the argument and `make prove` checks it exhaustively on small
-books. The golden model still carries a fallback (`AUCTION_TIE_LOWER`, lower price) and asserts it is never used.
+books. The golden model asserts that the nearest qualifying price is unique, so a counterexample would stop the tests.
 
 **R6.2 Opening and closing price.** OR Art. 58-3 ¶5: the opening price is the price of the first matched trade; the
 closing price is the closing auction price, or "Where unexecuted, the closing price shall be the last traded price
@@ -194,8 +194,8 @@ side, the trade price is its converted price (DECK slides 18–22, TM-en example
 **R7.2 Ambiguity: does the incoming order count as "in the book" for the conversion?** DECK slide 21 (新進限價 VS 市價與
 限價) converts a resting market buy with "最高賣單限價：90" where the only sell is the incoming limit sell at 90: yes, it
 counts. DECK slide 40 lists "最低買單限價：-" for a resting market sell although a limit buy is entering, but there the
-answer does not change the result. Interpretation: **the incoming limit order is included** (parameter
-`CONV_INCLUDES_INCOMING=1`, the only value implemented). The other reading would leave a resting market sell unmatched
+answer does not change the result. Interpretation: **the incoming limit order is included** (a fixed
+interpretation; the other reading is not implemented). The other reading would leave a resting market sell unmatched
 against an incoming bid below the last price, which contradicts "market orders have priority".
 
 Consequence used by the engine: a resting market order always matches an incoming opposite order, and an incoming
@@ -251,8 +251,8 @@ Engine parameters: `VI_BAND_PERMILLE=35`, `VI_HALT_S=120`, `VI_FIX_S=300`, `VI_W
 - *End of the applicable period.* TM-zh and CT say the measure runs to 13:25; DECK slide 27 (2019) says 13:20. The
   engine uses 13:25 (`T_CCALL`).
 - *An interruption that would end at or after 13:25.* Not covered by the sources. Interpretation: the stock is already
-  accumulating orders, so it goes straight into the closing call and is matched once, at 13:30 (parameter
-  `VI_MERGE_INTO_CLOSE=1`, the only value implemented).
+  accumulating orders, so it goes straight into the closing call and is matched once, at 13:30 (a fixed
+  interpretation; the alternative is not implemented).
 
 ## R9 Market data
 
@@ -289,6 +289,7 @@ When to ask (every 5 s, every message) is the host's choice.
 | V1 | TM-en reference-price example | VWAP 101.4, a trade at 105 triggers; 104 becomes the reference for five minutes |
 | V2–V3 | DECK slides 28–29 | 9:00–9:05 fixed reference; rolling average after |
 | V4–V13 | DECK slides 31–40 (1-1, 1-2, 2-1, 2-2, 3-1, 3-2, 4-1 … 4-4), TM-en IMG ct-5…12 | Each order type meeting the band |
+| V6b | TM-en FOK example in the interruption section (IMG ct-12), volume 5 | FOK killed without starting an interruption |
 
 Rules with no worked example found in the sources: the closing auction specifically (it uses R6), the tie-break by
 closeness to the last price (R6 ¶3), `REDUCE` keeping priority, the minimum-tick clause of R3, and R8's "no trades in

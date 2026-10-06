@@ -46,7 +46,7 @@ build: build/sim_tm
 # ---------------------------------------------------------------- tests
 # golden model: official worked examples, rules, invariant checker self-test
 unit:
-	$(PYTHON) -m unittest discover -s tests -t . 2>&1 | tail -4
+	$(PYTHON) -m unittest discover -s tests -t .
 
 # RTL against the golden model on TWSE's worked examples, then on directed boundary scenarios
 vectors: build/sim_tm
